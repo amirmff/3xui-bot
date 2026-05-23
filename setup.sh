@@ -6,6 +6,13 @@
 
 set -e
 
+# Ensure stdin comes from terminal (fixes curl | bash piping)
+if [ -t 0 ]; then
+    : # Already running from terminal
+else
+    exec < /dev/tty
+fi
+
 # ── Colors ────────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
