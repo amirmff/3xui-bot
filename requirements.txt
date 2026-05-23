@@ -1,0 +1,5 @@
+python-telegram-bot[ext]==21.12
+aiohttp==3.11.18
+aiohttp-socks==0.10.1
+python-dotenv==1.1.0
+qrcode[pil]==8.0
