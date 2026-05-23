@@ -20,8 +20,8 @@ BOLD='\033[1m'
 DIM='\033[2m'
 
 # ── Paths ─────────────────────────────────────────────────────
-INSTALL_DIR="/opt/3xui-bot"
-SERVICE_NAME="3xui-bot"
+INSTALL_DIR="/opt/3xui-tgbot"
+SERVICE_NAME="3xui-tgbot"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 ENV_FILE="${INSTALL_DIR}/.env"
 VENV_DIR="${INSTALL_DIR}/venv"

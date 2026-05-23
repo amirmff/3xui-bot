@@ -15,7 +15,7 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-INSTALL_DIR="/opt/3xui-bot"
+INSTALL_DIR="/opt/3xui-tgbot"
 REPO_URL="https://github.com/amirmff/3xui-bot.git"
 
 echo ""

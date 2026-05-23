@@ -30,8 +30,8 @@ bash <(curl -sSL https://raw.githubusercontent.com/amirmff/3xui-bot/main/install
 Or manually:
 
 ```bash
-git clone https://github.com/amirmff/3xui-bot.git /opt/3xui-bot
-cd /opt/3xui-bot
+git clone https://github.com/amirmff/3xui-bot.git /opt/3xui-tgbot
+cd /opt/3xui-tgbot
 chmod +x setup.sh
 sudo bash setup.sh
 ```
@@ -153,7 +153,7 @@ The interactive CLI will guide you through installation, configuration, and star
 After installation, manage the bot using the interactive CLI:
 
 ```bash
-sudo bash /opt/3xui-bot/setup.sh
+sudo bash /opt/3xui-tgbot/setup.sh
 ```
 
 ```
@@ -284,14 +284,14 @@ Customize templates in [`lang.py`](lang.py) → `TEMPLATES` list.
 ## 🔄 Updating
 
 ```bash
-cd /opt/3xui-bot
+cd /opt/3xui-tgbot
 sudo bash setup.sh
 # Choose option 9 (Update Bot)
 ```
 
 Or manually:
 ```bash
-cd /opt/3xui-bot
+cd /opt/3xui-tgbot
 git pull
 sudo bash setup.sh
 # Choose option 6 (Restart Bot)
