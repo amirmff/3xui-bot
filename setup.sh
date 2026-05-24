@@ -145,12 +145,13 @@ install_bot() {
     print_info "Creating bot directory..."
     mkdir -p "$INSTALL_DIR"
 
-    # Copy bot files (assumes script is in the same dir as bot files)
+    # Copy bot files (skip if already in install dir)
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-    if [[ -f "${SCRIPT_DIR}/bot.py" ]]; then
+    if [[ "$SCRIPT_DIR" == "$INSTALL_DIR" ]]; then
+        print_status "Bot files already in place (installed via git)"
+    elif [[ -f "${SCRIPT_DIR}/bot.py" ]]; then
         print_info "Copying bot files from ${SCRIPT_DIR}..."
-        # Copy all Python files and directories
         cp -r "${SCRIPT_DIR}/bot.py" "$INSTALL_DIR/"
         cp -r "${SCRIPT_DIR}/config.py" "$INSTALL_DIR/"
         cp -r "${SCRIPT_DIR}/lang.py" "$INSTALL_DIR/"
@@ -161,14 +162,13 @@ install_bot() {
         cp -r "${SCRIPT_DIR}/handlers" "$INSTALL_DIR/"
         cp -r "${SCRIPT_DIR}/utils" "$INSTALL_DIR/"
         [[ -f "${SCRIPT_DIR}/README.md" ]] && cp "${SCRIPT_DIR}/README.md" "$INSTALL_DIR/"
+        print_status "Bot files copied"
     else
         print_error "Bot files not found in ${SCRIPT_DIR}"
         print_info "Make sure setup.sh is in the same directory as bot.py"
         press_enter
         return
     fi
-
-    print_status "Bot files copied"
 
     # Create virtual environment
     echo ""
