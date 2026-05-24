@@ -91,7 +91,7 @@ The interactive CLI will guide you through installation, configuration, and star
 
 ### ⏰ Automated Monitoring
 - **Traffic monitor** — checks every 5 minutes
-- **Auto Xray restart** when clients exceed limits
+- **Auto Xray restart** when clients exceed limits (no duplicate alerts)
 - **Expiry alerts** — warns 24 hours before expiration
 - **Periodic status reports** — server health every 6 hours
 
@@ -234,7 +234,7 @@ The first panel is auto-created from your `.env` configuration. Additional panel
 │
 ├── api/
 │   ├── __init__.py
-│   ├── client.py           # Async HTTP client with proxy support
+│   ├── client.py           # Async HTTP client (httpx + SOCKS5 proxy)
 │   └── models.py           # Data models
 │
 ├── handlers/

@@ -7,7 +7,7 @@
 #   bash <(curl -sSL https://raw.githubusercontent.com/amirmff/3xui-bot/main/install.sh)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-set -e
+# Don't use set -e — we handle errors manually
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -28,6 +28,11 @@ echo ""
 if [[ $EUID -ne 0 ]]; then
     echo -e "${RED}❌ Run as root: sudo bash install.sh${NC}"
     exit 1
+fi
+
+# Ensure stdin comes from terminal (fixes curl | bash piping)
+if [ ! -t 0 ]; then
+    exec < /dev/tty
 fi
 
 # Install git if needed
