@@ -785,12 +785,27 @@ test_connection() {
             fi
         fi
 
-        # Try login with panel path if set
-        local login_url="${PANEL_URL}/login"
+        # Build login URL — handle all cases:
+        # Case 1: PANEL_URL=https://host:port  PANEL_PATH=mypath  → /mypath/login
+        # Case 2: PANEL_URL=https://host:port/mypath              → /mypath/login
+        # Case 3: PANEL_URL=https://host:port                     → /login
+        local base_url="${PANEL_URL%/}"
         if [[ -n "$PANEL_PATH" ]]; then
-            login_url="${PANEL_URL}/${PANEL_PATH}/login"
+            local clean_path="${PANEL_PATH#/}"
+            clean_path="${clean_path%/}"
+            # Check if base_url already ends with the path
+            if [[ "$base_url" != *"/$clean_path" ]]; then
+                base_url="${base_url}/${clean_path}"
+            fi
+        fi
+        local login_url="${base_url}/login"
+
+        echo -e "     ${DIM}URL: ${login_url}${NC}"
+        if [[ -n "$curl_proxy" ]]; then
+            echo -e "     ${DIM}Via proxy${NC}"
         fi
 
+        # Try form-urlencoded first
         local login_result=$(curl -sk --connect-timeout 15 $curl_proxy \
             -X POST "${login_url}" \
             -H "Content-Type: application/x-www-form-urlencoded" \
@@ -799,7 +814,7 @@ test_connection() {
         if echo "$login_result" | grep -q '"success":true'; then
             print_status "Panel login: OK"
         else
-            # Try JSON format too
+            # Try JSON format
             login_result=$(curl -sk --connect-timeout 15 $curl_proxy \
                 -X POST "${login_url}" \
                 -H "Content-Type: application/json" \
@@ -809,8 +824,22 @@ test_connection() {
                 print_status "Panel login: OK"
             else
                 print_error "Panel login: FAILED"
-                local msg=$(echo "$login_result" | grep -o '"msg":"[^"]*"' | cut -d'"' -f4)
-                [[ -n "$msg" ]] && print_error "  Message: $msg"
+                if [[ -n "$login_result" ]]; then
+                    local msg=$(echo "$login_result" | grep -o '"msg":"[^"]*"' | cut -d'"' -f4)
+                    if [[ -n "$msg" ]]; then
+                        print_error "  Message: $msg"
+                    else
+                        echo -e "     ${DIM}Response: ${login_result:0:200}${NC}"
+                    fi
+                else
+                    print_error "  No response (connection failed)"
+                fi
+                echo ""
+                print_info "Check your settings:"
+                echo -e "     ${DIM}Panel URL:  ${PANEL_URL}${NC}"
+                echo -e "     ${DIM}Path:       ${PANEL_PATH:-none}${NC}"
+                echo -e "     ${DIM}Username:   ${PANEL_USERNAME}${NC}"
+                echo -e "     ${DIM}Login URL:  ${login_url}${NC}"
             fi
         fi
     fi
