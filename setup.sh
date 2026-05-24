@@ -738,14 +738,7 @@ test_connection() {
 
         if [[ -n "$PROXY_URL" ]]; then
             print_info "Testing via proxy..."
-            local proxy_flag=""
-            if [[ "$PROXY_URL" == socks5://* ]]; then
-                proxy_flag="--socks5 ${PROXY_URL#socks5://}"
-            else
-                proxy_flag="--proxy ${PROXY_URL}"
-            fi
-
-            if curl -sk --connect-timeout 10 $proxy_flag "${PANEL_URL}" > /dev/null 2>&1; then
+            if curl -sk --connect-timeout 10 --proxy "${PROXY_URL}" "${PANEL_URL}" > /dev/null 2>&1; then
                 print_status "Connection via proxy: OK"
             else
                 print_error "Connection via proxy: FAILED"
@@ -773,16 +766,10 @@ test_connection() {
     # Test login to panel
     print_info "Testing panel login..."
     if [[ -n "$PANEL_URL" && -n "$PANEL_USERNAME" ]]; then
-        # Build proxy flags for curl
+        # Build proxy flags for curl (--proxy handles socks5:// http:// natively)
         local curl_proxy=""
         if [[ -n "$PROXY_URL" ]]; then
-            if [[ "$PROXY_URL" == socks5://* ]]; then
-                curl_proxy="--socks5-hostname ${PROXY_URL#socks5://}"
-            elif [[ "$PROXY_URL" == socks5h://* ]]; then
-                curl_proxy="--socks5-hostname ${PROXY_URL#socks5h://}"
-            else
-                curl_proxy="--proxy ${PROXY_URL}"
-            fi
+            curl_proxy="--proxy ${PROXY_URL}"
         fi
 
         # Build login URL — handle all cases:
