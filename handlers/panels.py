@@ -172,6 +172,7 @@ async def panel_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     buttons = []
     if not is_active:
         buttons.append([InlineKeyboardButton("🟢 Switch to This Panel", callback_data=f"{CB_PANEL_SELECT}:{panel_id}")])
+    buttons.append([InlineKeyboardButton("🔌 Test Connection", callback_data=f"pnl_test:{panel_id}")])
     buttons.append([InlineKeyboardButton("✏️ Edit", callback_data=f"{CB_PANEL_EDIT}:{panel_id}")])
     buttons.append([InlineKeyboardButton("🗑 Delete", callback_data=f"{CB_PANEL_DEL}:{panel_id}")])
     buttons.append([back_button(CB_PANEL_LIST)])
@@ -633,6 +634,75 @@ async def edit_panel_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return ConversationHandler.END
 
 
+# ─── Test Connection ──────────────────────────────────────────
+
+@admin_only
+async def panel_test_connection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Test connection to a panel."""
+    query = update.callback_query
+    await query.answer()
+
+    try:
+        panel_id = query.data.split(":")[1]
+    except (IndexError,):
+        return
+
+    pm = _get_panel_manager(context)
+    panel = pm.get_panel(panel_id)
+    if not panel:
+        await query.edit_message_text("❌ Panel not found.", parse_mode="HTML")
+        return
+
+    await query.edit_message_text(
+        f"🔌 <b>Testing: {panel.name}</b>\n\n⏳ Connecting...",
+        parse_mode="HTML",
+    )
+
+    from api.client import XUIClient
+    test_api = XUIClient(
+        base_url=panel.api_base,
+        username=panel.username,
+        password=panel.password,
+        proxy_url=panel.proxy_url,
+    )
+
+    try:
+        success = await test_api.login()
+        await test_api.close()
+
+        if success:
+            text = (
+                f"🔌 <b>Test: {panel.name}</b>\n\n"
+                f"✅ <b>Connection: OK</b>\n"
+                f"✅ <b>Login: OK</b>\n\n"
+                f"URL: <code>{panel.url}</code>\n"
+                f"Proxy: <code>{panel.proxy_url or 'none'}</code>"
+            )
+        else:
+            text = (
+                f"🔌 <b>Test: {panel.name}</b>\n\n"
+                f"⚠️ <b>Connection: OK</b>\n"
+                f"❌ <b>Login: FAILED</b>\n\n"
+                f"Check username/password."
+            )
+    except Exception as e:
+        await test_api.close()
+        text = (
+            f"🔌 <b>Test: {panel.name}</b>\n\n"
+            f"❌ <b>Connection: FAILED</b>\n\n"
+            f"Error: <code>{str(e)[:200]}</code>"
+        )
+
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Retry", callback_data=f"pnl_test:{panel_id}")],
+            [back_button(f"{CB_PANEL_VIEW}:{panel_id}")],
+        ]),
+        parse_mode="HTML",
+    )
+
+
 # ─── Register ─────────────────────────────────────────────────
 
 def register(app) -> None:
@@ -643,6 +713,7 @@ def register(app) -> None:
     app.add_handler(CallbackQueryHandler(panel_select, pattern=rf"^{CB_PANEL_SELECT}:"))
     app.add_handler(CallbackQueryHandler(panel_delete_confirm, pattern=rf"^{CB_PANEL_DEL}:"))
     app.add_handler(CallbackQueryHandler(panel_delete_execute, pattern=r"^pnl_del_yes:"))
+    app.add_handler(CallbackQueryHandler(panel_test_connection, pattern=r"^pnl_test:"))
 
     # Add panel conversation
     add_conv = ConversationHandler(

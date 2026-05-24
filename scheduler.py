@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 async def check_traffic_limits(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Periodic job: Check all clients for traffic limit violations.
-    If any client has exceeded their limit, restart Xray (due to known bug).
+    Only restart Xray and notify for NEW exceeded clients (not already notified).
     """
     api = context.bot_data.get("api")
     if not api:
@@ -30,7 +30,8 @@ async def check_traffic_limits(context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         inbounds = result.get("obj", [])
-        exceeded_clients: list[dict[str, Any]] = []
+        # Track exceeded clients: email -> used bytes
+        current_exceeded: dict[str, dict[str, Any]] = {}
 
         for inbound in inbounds:
             if not inbound.get("enable"):
@@ -41,29 +42,43 @@ async def check_traffic_limits(context: ContextTypes.DEFAULT_TYPE) -> None:
             for stat in client_stats:
                 total_limit = stat.get("total", 0)
                 if total_limit <= 0:
-                    # Unlimited traffic
-                    continue
+                    continue  # Unlimited
 
                 used = stat.get("up", 0) + stat.get("down", 0)
                 if used > total_limit:
-                    exceeded_clients.append({
-                        "email": stat.get("email", "unknown"),
+                    email = stat.get("email", "unknown")
+                    current_exceeded[email] = {
+                        "email": email,
                         "used": used,
                         "limit": total_limit,
                         "inbound_remark": inbound.get("remark", ""),
-                    })
+                    }
 
-        if exceeded_clients and ENABLE_AUTO_RESTART:
-            # Restart Xray
-            restart_result = await api.restart_xray()
+        # Get previously notified clients
+        prev_exceeded = context.bot_data.get("_exceeded_clients", {})
+
+        # Find NEW exceeded clients (not in previous check)
+        new_exceeded = []
+        for email, info in current_exceeded.items():
+            if email not in prev_exceeded:
+                new_exceeded.append(info)
+
+        # Save current state for next check
+        context.bot_data["_exceeded_clients"] = {
+            email: info["used"] for email, info in current_exceeded.items()
+        }
+
+        if new_exceeded and ENABLE_AUTO_RESTART:
+            # Restart Xray only for NEW exceeded clients
+            await api.restart_xray()
             logger.info(
-                "Auto-restarted Xray due to %d client(s) exceeding traffic limits",
-                len(exceeded_clients),
+                "Auto-restarted Xray due to %d NEW client(s) exceeding traffic limits",
+                len(new_exceeded),
             )
 
-            # Notify admins
+            # Notify admins only about new ones
             for admin_id in ADMIN_CHAT_IDS:
-                for client in exceeded_clients[:5]:  # Max 5 alerts at once
+                for client in new_exceeded[:5]:
                     from lang import SCHED_TRAFFIC_ALERT
                     msg = SCHED_TRAFFIC_ALERT.format(
                         email=client["email"],
@@ -79,11 +94,11 @@ async def check_traffic_limits(context: ContextTypes.DEFAULT_TYPE) -> None:
                     except Exception as e:
                         logger.error("Failed to send traffic alert to %s: %s", admin_id, e)
 
-                if len(exceeded_clients) > 5:
+                if len(new_exceeded) > 5:
                     try:
                         await context.bot.send_message(
                             chat_id=admin_id,
-                            text=f"... و {len(exceeded_clients) - 5} کاربر دیگر از حد مجاز فراتر رفته‌اند.",
+                            text=f"... و {len(new_exceeded) - 5} کاربر دیگر از حد مجاز فراتر رفته‌اند.",
                             parse_mode="HTML",
                         )
                     except Exception:
