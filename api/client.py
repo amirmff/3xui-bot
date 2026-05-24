@@ -30,15 +30,9 @@ class XUIClient:
         if self._session is None or self._session.closed:
             timeout = aiohttp.ClientTimeout(total=30, connect=15)
             if self.proxy_url:
-                # Force remote DNS resolution (socks5h://) for proxy
-                # This is needed when the bot server can't resolve the panel domain
-                proxy = self.proxy_url
-                if proxy.startswith("socks5://"):
-                    proxy = "socks5h://" + proxy[len("socks5://"):]
-
                 from aiohttp_socks import ProxyConnector
                 connector = ProxyConnector.from_url(
-                    proxy, ssl=self.verify_ssl, rdns=True
+                    self.proxy_url, ssl=self.verify_ssl, rdns=True
                 )
                 logger.info("Using proxy: %s", self.proxy_url.split("@")[-1] if "@" in self.proxy_url else self.proxy_url)
             else:
