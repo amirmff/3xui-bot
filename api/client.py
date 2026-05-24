@@ -28,7 +28,7 @@ class XUIClient:
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create the aiohttp session with optional proxy support."""
         if self._session is None or self._session.closed:
-            timeout = aiohttp.ClientTimeout(total=30, connect=15)
+            timeout = aiohttp.ClientTimeout(total=60, connect=30)
             if self.proxy_url:
                 from aiohttp_socks import ProxyConnector
                 connector = ProxyConnector.from_url(
