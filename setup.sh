@@ -773,17 +773,45 @@ test_connection() {
     # Test login to panel
     print_info "Testing panel login..."
     if [[ -n "$PANEL_URL" && -n "$PANEL_USERNAME" ]]; then
-        local login_result=$(curl -sk --connect-timeout 10 \
-            -X POST "${PANEL_URL}/login" \
-            -H "Content-Type: application/json" \
-            -d "{\"username\":\"${PANEL_USERNAME}\",\"password\":\"${PANEL_PASSWORD}\"}" 2>/dev/null)
+        # Build proxy flags for curl
+        local curl_proxy=""
+        if [[ -n "$PROXY_URL" ]]; then
+            if [[ "$PROXY_URL" == socks5://* ]]; then
+                curl_proxy="--socks5-hostname ${PROXY_URL#socks5://}"
+            elif [[ "$PROXY_URL" == socks5h://* ]]; then
+                curl_proxy="--socks5-hostname ${PROXY_URL#socks5h://}"
+            else
+                curl_proxy="--proxy ${PROXY_URL}"
+            fi
+        fi
+
+        # Try login with panel path if set
+        local login_url="${PANEL_URL}/login"
+        if [[ -n "$PANEL_PATH" ]]; then
+            login_url="${PANEL_URL}/${PANEL_PATH}/login"
+        fi
+
+        local login_result=$(curl -sk --connect-timeout 15 $curl_proxy \
+            -X POST "${login_url}" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "username=${PANEL_USERNAME}&password=${PANEL_PASSWORD}" 2>/dev/null)
 
         if echo "$login_result" | grep -q '"success":true'; then
             print_status "Panel login: OK"
         else
-            print_error "Panel login: FAILED"
-            local msg=$(echo "$login_result" | grep -o '"msg":"[^"]*"' | cut -d'"' -f4)
-            [[ -n "$msg" ]] && print_error "  Message: $msg"
+            # Try JSON format too
+            login_result=$(curl -sk --connect-timeout 15 $curl_proxy \
+                -X POST "${login_url}" \
+                -H "Content-Type: application/json" \
+                -d "{\"username\":\"${PANEL_USERNAME}\",\"password\":\"${PANEL_PASSWORD}\"}" 2>/dev/null)
+
+            if echo "$login_result" | grep -q '"success":true'; then
+                print_status "Panel login: OK"
+            else
+                print_error "Panel login: FAILED"
+                local msg=$(echo "$login_result" | grep -o '"msg":"[^"]*"' | cut -d'"' -f4)
+                [[ -n "$msg" ]] && print_error "  Message: $msg"
+            fi
         fi
     fi
 
