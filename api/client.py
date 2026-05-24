@@ -42,7 +42,7 @@ class XUIClient:
             if self.proxy_url:
                 from aiohttp_socks import ProxyConnector
                 connector = ProxyConnector.from_url(
-                    self.proxy_url, rdns=True
+                    self.proxy_url, rdns=False
                 )
                 logger.info("Using proxy: %s", self.proxy_url.split("@")[-1] if "@" in self.proxy_url else self.proxy_url)
             else:
