@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import ssl as _ssl
 from typing import Any, Optional
 
 import aiohttp
@@ -25,6 +26,15 @@ class XUIClient:
         self._session: Optional[aiohttp.ClientSession] = None
         self._logged_in: bool = False
 
+    def _get_ssl_context(self):
+        """Get SSL context — skip verification if verify_ssl is False."""
+        if not self.verify_ssl:
+            ctx = _ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = _ssl.CERT_NONE
+            return ctx
+        return None  # Use default SSL
+
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create the aiohttp session with optional proxy support."""
         if self._session is None or self._session.closed:
@@ -32,11 +42,11 @@ class XUIClient:
             if self.proxy_url:
                 from aiohttp_socks import ProxyConnector
                 connector = ProxyConnector.from_url(
-                    self.proxy_url, ssl=self.verify_ssl, rdns=True
+                    self.proxy_url, rdns=True
                 )
                 logger.info("Using proxy: %s", self.proxy_url.split("@")[-1] if "@" in self.proxy_url else self.proxy_url)
             else:
-                connector = aiohttp.TCPConnector(ssl=self.verify_ssl)
+                connector = aiohttp.TCPConnector()
 
             self._session = aiohttp.ClientSession(connector=connector, timeout=timeout)
             self._logged_in = False
@@ -47,8 +57,9 @@ class XUIClient:
         session = await self._get_session()
         url = f"{self.base_url}/login"
         payload = {"username": self.username, "password": self.password}
+        ssl_ctx = self._get_ssl_context()
         try:
-            async with session.post(url, json=payload) as resp:
+            async with session.post(url, data=payload, ssl=ssl_ctx) as resp:
                 data = await resp.json()
                 if data.get("success"):
                     self._logged_in = True
@@ -73,6 +84,7 @@ class XUIClient:
         await self._ensure_login()
         session = await self._get_session()
         url = f"{self.base_url}{path}"
+        kwargs.setdefault("ssl", self._get_ssl_context())
 
         async with session.request(method, url, **kwargs) as resp:
             if resp.status == 401 or resp.status == 403:
