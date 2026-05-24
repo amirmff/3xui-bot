@@ -4,7 +4,7 @@
 # 3x-ui Telegram Bot — Installer & Management Script
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-set -e
+# Don't use set -e — interactive script handles errors itself
 
 # Ensure stdin comes from terminal (fixes curl | bash piping)
 if [ -t 0 ]; then
