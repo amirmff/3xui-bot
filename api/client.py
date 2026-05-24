@@ -28,17 +28,23 @@ class XUIClient:
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create the aiohttp session with optional proxy support."""
         if self._session is None or self._session.closed:
+            timeout = aiohttp.ClientTimeout(total=30, connect=15)
             if self.proxy_url:
-                # Use proxy connector (SOCKS5/HTTP)
+                # Force remote DNS resolution (socks5h://) for proxy
+                # This is needed when the bot server can't resolve the panel domain
+                proxy = self.proxy_url
+                if proxy.startswith("socks5://"):
+                    proxy = "socks5h://" + proxy[len("socks5://"):]
+
                 from aiohttp_socks import ProxyConnector
                 connector = ProxyConnector.from_url(
-                    self.proxy_url, ssl=self.verify_ssl
+                    proxy, ssl=self.verify_ssl, rdns=True
                 )
                 logger.info("Using proxy: %s", self.proxy_url.split("@")[-1] if "@" in self.proxy_url else self.proxy_url)
             else:
                 connector = aiohttp.TCPConnector(ssl=self.verify_ssl)
 
-            self._session = aiohttp.ClientSession(connector=connector)
+            self._session = aiohttp.ClientSession(connector=connector, timeout=timeout)
             self._logged_in = False
         return self._session
 
