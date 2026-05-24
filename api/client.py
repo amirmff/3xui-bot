@@ -4,16 +4,15 @@ from __future__ import annotations
 
 import json
 import logging
-import ssl as _ssl
 from typing import Any, Optional
 
-import aiohttp
+import httpx
 
 logger = logging.getLogger(__name__)
 
 
 class XUIClient:
-    """Async client for 3x-ui REST API with automatic session management and proxy support."""
+    """Async client for 3x-ui REST API using httpx with SOCKS5 proxy support."""
 
     def __init__(self, base_url: str = "", username: str = "admin",
                  password: str = "admin", verify_ssl: bool = False,
@@ -23,51 +22,46 @@ class XUIClient:
         self.password = password
         self.verify_ssl = verify_ssl
         self.proxy_url = proxy_url
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._client: Optional[httpx.AsyncClient] = None
         self._logged_in: bool = False
 
-    def _get_ssl_context(self):
-        """Get SSL context — skip verification if verify_ssl is False."""
-        if not self.verify_ssl:
-            ctx = _ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = _ssl.CERT_NONE
-            return ctx
-        return None  # Use default SSL
+    def _create_client(self) -> httpx.AsyncClient:
+        """Create httpx AsyncClient with optional proxy support."""
+        kwargs: dict[str, Any] = {
+            "verify": self.verify_ssl,
+            "timeout": httpx.Timeout(60.0, connect=30.0),
+            "follow_redirects": True,
+        }
 
-    async def _get_session(self) -> aiohttp.ClientSession:
-        """Get or create the aiohttp session with optional proxy support."""
-        if self._session is None or self._session.closed:
-            timeout = aiohttp.ClientTimeout(total=60, connect=30)
-            if self.proxy_url:
-                from aiohttp_socks import ProxyConnector
-                connector = ProxyConnector.from_url(
-                    self.proxy_url, rdns=False
-                )
-                logger.info("Using proxy: %s", self.proxy_url.split("@")[-1] if "@" in self.proxy_url else self.proxy_url)
-            else:
-                connector = aiohttp.TCPConnector()
+        if self.proxy_url:
+            kwargs["proxy"] = self.proxy_url
+            masked = self.proxy_url.split("@")[-1] if "@" in self.proxy_url else self.proxy_url
+            logger.info("Using proxy: %s", masked)
 
-            self._session = aiohttp.ClientSession(connector=connector, timeout=timeout)
+        return httpx.AsyncClient(**kwargs)
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Get or create the httpx client."""
+        if self._client is None or self._client.is_closed:
+            self._client = self._create_client()
             self._logged_in = False
-        return self._session
+        return self._client
 
     async def login(self) -> bool:
         """Authenticate with the panel and store session cookie."""
-        session = await self._get_session()
+        client = await self._get_client()
         url = f"{self.base_url}/login"
         payload = {"username": self.username, "password": self.password}
-        ssl_ctx = self._get_ssl_context()
         try:
-            async with session.post(url, data=payload, ssl=ssl_ctx) as resp:
-                data = await resp.json()
-                if data.get("success"):
-                    self._logged_in = True
-                    logger.info("Successfully logged in to 3x-ui panel")
-                    return True
-                else:
-                    logger.error("Login failed: %s", data.get("msg", "Unknown error"))
-                    return False
+            resp = await client.post(url, data=payload)
+            data = resp.json()
+            if data.get("success"):
+                self._logged_in = True
+                logger.info("Successfully logged in to 3x-ui panel")
+                return True
+            else:
+                logger.error("Login failed: %s", data.get("msg", "Unknown error"))
+                return False
         except Exception as e:
             logger.error("Login error: %s", e)
             return False
@@ -82,26 +76,24 @@ class XUIClient:
     async def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         """Make an authenticated API request with auto re-login on 401."""
         await self._ensure_login()
-        session = await self._get_session()
+        client = await self._get_client()
         url = f"{self.base_url}{path}"
-        kwargs.setdefault("ssl", self._get_ssl_context())
 
-        async with session.request(method, url, **kwargs) as resp:
-            if resp.status == 401 or resp.status == 403:
-                # Session expired, re-login and retry
-                logger.info("Session expired, re-logging in...")
-                self._logged_in = False
-                await self._ensure_login()
-                async with session.request(method, url, **kwargs) as retry_resp:
-                    return await self._parse_response(retry_resp)
-            return await self._parse_response(resp)
+        resp = await client.request(method, url, **kwargs)
+        if resp.status_code in (401, 403):
+            # Session expired, re-login and retry
+            logger.info("Session expired, re-logging in...")
+            self._logged_in = False
+            await self._ensure_login()
+            resp = await client.request(method, url, **kwargs)
+        return self._parse_response(resp)
 
-    async def _parse_response(self, resp: aiohttp.ClientResponse) -> dict[str, Any]:
+    def _parse_response(self, resp: httpx.Response) -> dict[str, Any]:
         """Parse the API response."""
         try:
-            data = await resp.json()
+            data = resp.json()
         except Exception:
-            text = await resp.text()
+            text = resp.text
             data = {"success": False, "msg": f"Non-JSON response: {text[:200]}"}
         return data
 
@@ -227,10 +219,10 @@ class XUIClient:
     async def get_db(self) -> bytes:
         """Download the database file."""
         await self._ensure_login()
-        session = await self._get_session()
+        client = await self._get_client()
         url = f"{self.base_url}/panel/api/server/getDb"
-        async with session.get(url) as resp:
-            return await resp.read()
+        resp = await client.get(url)
+        return resp.content
 
     async def get_new_uuid(self) -> dict[str, Any]:
         """Generate a new UUID."""
@@ -273,13 +265,11 @@ class XUIClient:
     async def import_db(self, db_data: bytes) -> dict[str, Any]:
         """Import a database file."""
         await self._ensure_login()
-        session = await self._get_session()
+        client = await self._get_client()
         url = f"{self.base_url}/panel/api/server/importDB"
-        form = aiohttp.FormData()
-        form.add_field("db", db_data, filename="x-ui.db",
-                       content_type="application/octet-stream")
-        async with session.post(url, data=form) as resp:
-            return await self._parse_response(resp)
+        files = {"db": ("x-ui.db", db_data, "application/octet-stream")}
+        resp = await client.post(url, files=files)
+        return self._parse_response(resp)
 
     # ─── Extra API ───────────────────────────────────────────────────────
 
@@ -290,6 +280,6 @@ class XUIClient:
     # ─── Cleanup ─────────────────────────────────────────────────────────
 
     async def close(self) -> None:
-        """Close the HTTP session."""
-        if self._session and not self._session.closed:
-            await self._session.close()
+        """Close the HTTP client."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
